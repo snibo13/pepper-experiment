@@ -2,6 +2,9 @@ import argparse
 # from pynput import keyboard
 import qi
 import sys
+import os
+import tty
+import termios
 from time import sleep
 
 
@@ -27,6 +30,11 @@ class Pepper:
         self.posture_service = self.session.service("ALRobotPosture")
         self.tts = self.session.service("ALTextToSpeech")
         self.tablet_service = self.session.service("ALTabletService")
+        self.tablet_service.enableWifi()
+        print("Wifi On")
+        self.tablet_service.loadURL("https://www.google.com")
+        self.tablet_service.showWebview()
+        sleep(3)
 
     def move_forward(self, speed):
         print("Moving")
@@ -52,7 +60,7 @@ class Pepper:
         self.tts.say(text)
 
     def open_tip_screen(self):
-        self.tablet_service.loadURL("http://snibo.me/pepper-1.html")
+        self.tablet_service.loadUrl("http://snibo.me/pepper-1.html")
 
     def enable_collision_protection(self):
         print("Enabling collision protection")
@@ -64,44 +72,67 @@ class Pepper:
         self.posture_service.applyPosture("StandZero", 0.5)
 
     def on_keypress(self, key):
+        if key == 'w':
+            self.move_forward(1)
+            self.sleep(1)
+        elif key == 's':
+            self.move_forward(-1)
+            self.sleep(1)
+        elif key == 'a':
+            self.turn_around(1)
+            self.sleep(1.3)
+        elif key == 'd':
+            self.turn_around(-1)
+            self.sleep(1.3)
+        elif key == '1':
+            self.speak("Hi, May I take your order")
+        elif key == '2':
+            self.speak("Alright. One Moment Please")
+        elif key == '3':
+            self.open_tip_screen()
+
+    def getkey(self):
+        old_settings = termios.tcgetattr(sys.stdin)
+        tty.setcbreak(sys.stdin.fileno())
         try:
-            print("alphanumeric key {0} pressed".format(key.char))
-            if key.char == "w":
-                self.move_forward(1)
-                self.sleep(3)
-            elif key.char == "s":
-                self.move_forward(-1)
-                self.sleep(3)
-            elif key.char == "a":
-                self.turn_around(1)
-                self.sleep(1.3)
-            elif key.char == "d":
-                self.turn_around(-1)
-                self.sleep(1.3)
-            elif key.char == "1":
-                self.speak("Hi, May I take your order")
-            elif key.char == "2":
-                self.speak("Alright. One Moment Please")
-            elif key.char == "3":
-                self.open_tip_screen()
-        except AttributeError:
-            print("special key {0} pressed".format(key))
+            while True:
+                b = os.read(sys.stdin.fileno(), 3).decode()
+                if len(b) == 3:
+                    k = ord(b[2])
+                else:
+                    k = ord(b)
+                key_mapping = {
+                    127: 'backspace',
+                    10: 'return',
+                    32: 'space',
+                    9: 'tab',
+                    27: 'esc',
+                    65: 'up',
+                    66: 'down',
+                    67: 'right',
+                    68: 'left'
+                }
+                return key_mapping.get(k, chr(k))
+        finally:
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
 
     def start_teleop(self):
         print("Disabling collision protection and starting teleop.")
         print(
             "W: forward, S: backward, A: turn left, D: turn right, 1: say hi, 2: say bye"
         )
-        print("Press Ctrl+C to exit.")
+        print("Press esc to exit.")
         self.disable_collision_protection()
-        # listener = keyboard.Listener(on_press=self.on_keypress)
-        # listener.start()
+
         try:
             while True:
-                key = input()
-                self.on_keypress(key)
-        except KeyboardInterrupt:
-            # listener.stop()
+                k = self.getkey()
+                if k == 'esc':
+                    quit()
+                else:
+                    print(k)
+                    self.on_keypress(k)
+        except (KeyboardInterrupt, SystemExit):
             self.enable_collision_protection()
             pass
 
